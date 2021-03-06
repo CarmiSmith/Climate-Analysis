@@ -9,17 +9,17 @@ from flask import Flask, jsonify
 
 # Database Setup
 engine = create_engine("sqlite:///hawaii.sqlite")
-# reflect an existing database into a new model
+# Reflect database
 Base = automap_base()
-# reflect the tables
+# Reflect tables
 Base.prepare(engine, reflect=True)
-# Save reference to the table
+# Variable for tables
 Measurement = Base.classes.measurement
 
-# Create an app, being sure to pass __name__
+# Use flask to set up app to view data
 app = Flask(__name__)
 
-# Define what to do when a user hits the index route
+# Home route
 @app.route("/")
 def welcome():
     """List all available api routes."""
@@ -32,72 +32,68 @@ def welcome():
         f"/api/v1.0/startend/<start>/<end>"
     )
 
-# Define what to do when a user hits the /api/v1.0/precipitation
+
+
+# Percipitation route
 @app.route("/api/v1.0/precipitation")
 def precipitation():
-    # Create our session (link) from Python to the DB
+    # Create our session for API
     session = Session(engine)
-
-    # Calculated the date 1 year ago from the last data point in the database
-    #last_date = session.query(Measurement.date).\
-        #order_by(Measurement.date.desc()).first()
-    query_date = dt.date(2017, 8, 23) - dt.timedelta(days=365)
-
+    
     """Return a list of all prcp names."""
-    # Performed a query to retrieve the data and precipitation scores
-    last_twelve = session.query(Measurement.date, Measurement.prcp).\
-        filter(Measurement.date >= query_date).\
+    # Query to retrieve the data and precipitation scores
+    one_year_ago = dt.date(2017,8,18) - dt.timedelta(days=365)
+    last_year = session.query(Measurement.date, Measurement.prcp).\
+        filter(Measurement.date >= one_year_ago).\
         order_by(Measurement.date.desc()).all()
 
+    #close session
     session.close()
 
-    # Convert list of tuples into normal list
+    # Create a dictionary and retrieve data
     all_prcp = []
-    for date, prcp in last_twelve:
+    for date, prcp in last_year:
         prcp_dict = {}
         prcp_dict[date] = prcp
         all_prcp.append(prcp_dict)
 
     return jsonify(all_prcp)
 
-# Define what to do when a user hits the /api/v1.0/stations
+# Stations route
 @app.route("/api/v1.0/stations")
 def stations():
-    # Create our session (link) from Python to the DB
+    # Create our session for API
     session = Session(engine)
 
-    # Get a list of stations
+    # Query the database and get station names
     results = session.query(Measurement.station).\
         group_by(Measurement.station).\
         order_by(func.count(Measurement.station).desc()).all()
     
+    #close session
     session.close()
 
-    # Convert list of tuples into normal list
+    # Convert to normal list
     all_station = list(np.ravel(results))
     
     return jsonify(all_station)
 
-# Define what to do when a user hits the /api/v1.0/tobs
+# Tobs route
 @app.route("/api/v1.0/tobs")
 def tobs():
-    # Create our session (link) from Python to the DB
+    # Create our session for API
     session = Session(engine)
     
-    # Get date one year from tobs
-    #max_tobs_last_date = session.query(Measurement.date).\
-        #order_by(Measurement.date.desc()).first()
-    
-    query_date = dt.date(2017, 8 ,18) - dt.timedelta(days=365)
-    
     # Get tobs and date from a year ago
+    one_year_ago = dt.date(2017,8,18) - dt.timedelta(days=365)
     results = session.query(Measurement.date, Measurement.tobs).\
-        filter(Measurement.date >= query_date).\
+        filter(Measurement.date >= one_year_ago).\
         order_by(Measurement.date.desc()).all()
     
+    #close session
     session.close()
 
-    # Convert list of tuples into normal list
+    # Create a dictionary and retrieve data
     all_tobs = []
     for date, tobs in results:
         tobs_dict = {}
@@ -106,19 +102,22 @@ def tobs():
 
     return jsonify(all_tobs)
 
-# Define what to do when a user hits the /api/v1.0/start_date/<start>
+# Custom start to end route
 @app.route("/api/v1.0/start_date/<start>")
 def start_date(start):
-    # Create our session (link) from Python to the DB
+    start = dt.datetime.strptime(start, '%Y-%m-%d')
+
+    # Create our session for API
     session = Session(engine)
-    
-    # When given the start only, calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than and equal to the start date
+
+    # Query database
     results = session.query(func.min(Measurement.tobs),func.avg(Measurement.tobs),func.max(Measurement.tobs)).\
-        filter(Measurement.date >= start)
+        filter(Measurement.date >= start).all()
     
+    #close session
     session.close()
 
-     # Create a dictionary from the row data and append to a list of all_temp_normals
+    # Create a dictionary and retrieve data
     t_normals = []
     for min_tobs, avg_tobs, max_tobs in results:
         temp_dict = {}
@@ -129,20 +128,24 @@ def start_date(start):
     
     return jsonify(t_normals)
 
-# Define what to do when a user hits the /api/v1.0/startend/<start>/<end>
+# custom date range route
 @app.route("/api/v1.0/startend/<start>/<end>")
 def startend(start,end):
-    # Create our session (link) from Python to the DB
+    start = dt.datetime.strptime(start, '%Y-%m-%d')
+    end = dt.datetime.strptime(end, '%Y-%m-%d')
+
+    # Create our session for API
     session = Session(engine)
    
-    # When given the start only, calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than and equal to the start date
+    # Query to calculate TMIN, TAVG, and TMAX 
     results = session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
         filter(Measurement.date >= start).\
         filter(Measurement.date <= end).all()
-    
+
+    # Close session
     session.close()
 
-    # Create a dictionary from the row data and append to a list of all_temp_normals
+    # Create a dictionary and retrieve data
     t_normals = []
     for min_tobs, avg_tobs, max_tobs in results:
         temp_dict = {}
@@ -152,5 +155,7 @@ def startend(start,end):
         t_normals.append(temp_dict)
     
     return jsonify(t_normals)
+
+# Keeps flask running while open   
 if __name__ == '__main__':
     app.run(debug=True)
